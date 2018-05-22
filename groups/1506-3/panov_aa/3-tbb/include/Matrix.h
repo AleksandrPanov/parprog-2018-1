@@ -295,6 +295,12 @@ public:
 		transpositionMatrix();
         return res;
     }
+
+    void iterationMult(int start, int end)
+    {
+
+    }
+
     MatrixCCS parallelMult(const MatrixCCS &m, int numThreads)
     {
         //matrix must be transposition          
@@ -392,104 +398,7 @@ public:
 			tmp[0].pointer.push_back(tmp[0].values.size());
 		return tmp[0];
     }
-	MatrixCCS testMult(const MatrixCCS &m, int numThreads = 2)
-	{
-		transpositionMatrix();
-
-		vector<MatrixCCS> tmp(numThreads, MatrixCCS(N));
-
-		vector<int> *cols = &rows;
-		vector<int> elCountM(numThreads);
-		int size = m.N / numThreads + (bool)(m.N % numThreads);
-		vector<pair<int,int>> j_index(numThreads);
-		for (int i = 0; i < numThreads; i++)
-		{
-			j_index[i] = std::make_pair(i*size, min((i+1)*size, m.N));
-		}
-		int last_pointerM = 0;
-		for (int i = 0; i < numThreads; i++)
-		{
-			elCountM[i] = last_pointerM;
-			int jstart = j_index[i].first;
-			int jend = j_index[i].second;
-			for (jstart; jstart < jend; jstart++)
-			{
-				last_pointerM += m.pointer[jstart + 1] - m.pointer[jstart];
-			}
-		}
-		for (int indexThread = 0; indexThread < numThreads; indexThread++)
-			for (int j = j_index[indexThread].first; j < j_index[indexThread].second; j++)
-			{
-				int numElInResCol = 0;
-				const int numElementInCol = m.pointer[j + 1] - m.pointer[j];
-				if (numElementInCol == 0)
-				{
-					int size = tmp[indexThread].pointer.size();
-					tmp[indexThread].pointer.push_back(tmp[indexThread].pointer[size - 1]);
-					continue;
-				}
-				int elCountThis = 0;
-				for (int i = 0; i < N; i++)
-				{
-					const int numElementInRow = pointer[i + 1] - pointer[i];
-					if (numElementInRow == 0)
-					{
-						continue;
-					}
-					int tmpNumElCol = numElementInCol;
-					int tmpNumElRow = numElementInRow;
-
-					Element sum = 0;
-					int tmpElCountM = elCountM[indexThread];
-					for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
-					{
-						int colThis = (*cols)[elCountThis];
-						int rowM = m.rows[tmpElCountM];
-						if (colThis == rowM)
-						{
-							sum += values[elCountThis] * m.values[tmpElCountM];
-							tmpNumElCol--;
-							tmpNumElRow--;
-							tmpElCountM++;
-							elCountThis++;
-						}
-						else if (colThis < rowM)
-						{
-							tmpNumElRow--;
-							elCountThis++;
-						}
-						else
-						{
-							tmpNumElCol--;
-							tmpElCountM++;
-						}
-					}
-					for (int z = 0; z < tmpNumElRow; z++)
-						elCountThis++;
-
-					if (sum != 0)
-					{
-						tmp[indexThread].values.push_back(sum);
-						tmp[indexThread].rows.push_back(i);
-						numElInResCol++;
-					}
-				}
-				const int size = tmp[indexThread].pointer.size();
-				tmp[indexThread].pointer.push_back(tmp[indexThread].pointer[size - 1] + numElInResCol);
-				elCountM[indexThread] += numElementInCol;
-			}
-        
-		for (int i = 1; i < numThreads; i++)
-        {
-            tmp[0].unite(tmp[i]);
-        }
-       if (tmp[0].pointer.size() < N + 1)
-            tmp[0].pointer.push_back(tmp[0].values.size());
-       
-		transpositionMatrix();
-		return tmp[0];
-	}
-
+	
     bool operator == (const MatrixCCS &m)
     {
         return (N == m.N & values == m.values & rows == m.rows & pointer == m.pointer);
