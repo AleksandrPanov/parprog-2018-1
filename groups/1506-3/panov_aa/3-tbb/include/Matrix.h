@@ -309,7 +309,8 @@ public:
 		vector<int> *cols = &rows;      
         
 		vector<pair<int, int>> task(numThreads);
-		{//prepare task
+		{
+            //prepare task
 			int sizeTask = m.N / numThreads + (bool)(m.N % numThreads);
 			for (int i = 0; i < numThreads; i++)
 				task[i] = std::make_pair(i*sizeTask, min((i + 1)*sizeTask, m.N));
