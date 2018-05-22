@@ -1,5 +1,5 @@
 #include "../gtest/gtest/gtest.h"
-#include "../../include/complex_numbers.h"
+#include "complex_numbers.h"
 TEST(complex, can_add)
 {
     Complex q1(1, 2), q2(2, 4);

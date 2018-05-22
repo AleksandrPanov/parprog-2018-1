@@ -9,6 +9,7 @@ using std::vector;
 using std::list;
 using std::pair;
 using std::make_pair;
+using std::min;
 typedef double Element;
 
 class Matrix
@@ -254,7 +255,7 @@ public:
 
                 Element sum = 0;
                 int tmpElCountM = elCountM;               
-                for (int z = 0; z < std::min(tmpNumElCol, tmpNumElRow);)
+                for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
                 {                  
                     int colThis = (*cols)[elCountThis];
                     int rowM = m.rows[tmpElCountM];
@@ -305,7 +306,7 @@ public:
 		{//prepare task
 			int sizeTask = m.N / numThreads + (bool)(m.N % numThreads);
 			for (int i = 0; i < numThreads; i++)
-				task[i] = std::make_pair(i*sizeTask, std::min((i + 1)*sizeTask, m.N));
+				task[i] = std::make_pair(i*sizeTask, min((i + 1)*sizeTask, m.N));
 			int lastPointerM = 0;
 			for (int i = 0; i < numThreads; i++)
 			{
@@ -345,7 +346,7 @@ public:
 
 				Element sum = 0;
 				int tmpElCountM = elCountM[indexThread];
-				for (int z = 0; z < std::min(tmpNumElCol, tmpNumElRow);)
+				for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
 				{
 					int colThis = (*cols)[elCountThis];
 					int rowM = m.rows[tmpElCountM];
@@ -403,7 +404,7 @@ public:
 		vector<pair<int,int>> j_index(numThreads);
 		for (int i = 0; i < numThreads; i++)
 		{
-			j_index[i] = std::make_pair(i*size, std::min((i+1)*size, m.N));
+			j_index[i] = std::make_pair(i*size, min((i+1)*size, m.N));
 		}
 		int last_pointerM = 0;
 		for (int i = 0; i < numThreads; i++)
@@ -440,7 +441,7 @@ public:
 
 					Element sum = 0;
 					int tmpElCountM = elCountM[indexThread];
-					for (int z = 0; z < std::min(tmpNumElCol, tmpNumElRow);)
+					for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
 					{
 						int colThis = (*cols)[elCountThis];
 						int rowM = m.rows[tmpElCountM];
