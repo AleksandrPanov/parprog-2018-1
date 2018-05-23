@@ -4,6 +4,8 @@
 #include <iostream>
 #include <list>
 #include <omp.h>
+#include "tbb\tbb.h"
+
 using std::ostream;
 using std::vector;
 using std::list;
@@ -296,108 +298,114 @@ public:
         return res;
     }
 
-    void iterationMult(int start, int end)
+    void iterationMult(int start, int end, int taskIndex, const MatrixCCS &m, const vector<int> *cols, const MatrixCCS *tmp1, const int *elCountM)
     {
+        MatrixCCS *tmp = const_cast<MatrixCCS*>(tmp1);
+        for (int j = start; j < end; j++)
+        {
+            int indexTask = taskIndex;
+            int numElInResCol = 0;
+            const int numElementInCol = m.pointer[j + 1] - m.pointer[j];
+            if (numElementInCol == 0)
+            {
+                int size = tmp->pointer.size();
+                tmp->pointer.push_back(tmp->pointer[size - 1]);
+                continue;
+            }
+            int elCountThis = 0;
+            for (int i = 0; i < N; i++)
+            {
+                const int numElementInRow = pointer[i + 1] - pointer[i];
+                if (numElementInRow == 0)
+                {
+                    continue;
+                }
+                int tmpNumElCol = numElementInCol;
+                int tmpNumElRow = numElementInRow;
 
+                Element sum = 0;
+                int tmpElCountM = *elCountM;
+                for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
+                {
+                    int colThis = (*cols)[elCountThis];
+                    int rowM = m.rows[tmpElCountM];
+                    if (colThis == rowM)
+                    {
+                        sum += values[elCountThis] * m.values[tmpElCountM];
+                        tmpNumElCol--;
+                        tmpNumElRow--;
+                        tmpElCountM++;
+                        elCountThis++;
+                    }
+                    else if (colThis < rowM)
+                    {
+                        tmpNumElRow--;
+                        elCountThis++;
+                    }
+                    else
+                    {
+                        tmpNumElCol--;
+                        tmpElCountM++;
+                    }
+                }
+                for (int z = 0; z < tmpNumElRow; z++)
+                    elCountThis++;
+
+                if (sum != 0)
+                {
+                    tmp->values.push_back(sum);
+                    tmp->rows.push_back(i);
+                    numElInResCol++;
+                }
+            }
+            const int size = tmp->pointer.size();
+            tmp->pointer.push_back(tmp->pointer[size - 1] + numElInResCol);
+            elCountM += numElementInCol;
+        }
     }
 
-    MatrixCCS parallelMult(const MatrixCCS &m, int numThreads)
+    MatrixCCS parallelMult(const MatrixCCS &m, const int numTask)
     {
-        //matrix must be transposition          
-        vector<MatrixCCS> tmp(numThreads, MatrixCCS(N));     
-		vector<int> elCountM(numThreads);
-		vector<int> *cols = &rows;      
-        
-		vector<pair<int, int>> task(numThreads);
-		{
+        struct Task
+        {
+            int pointerStart;
+            int pointerEnd;
+            int taskIndex;
+            Task() :pointerStart(0), pointerEnd(0), taskIndex(0) {}
+            Task(int a, int b, int c) :pointerStart(a), pointerEnd(b), taskIndex(c) {}
+        };
+        vector<MatrixCCS> tmp(numTask, MatrixCCS(N));
+        vector<int> elCountM(numTask);
+        vector<int> *cols = &rows;
+
+        vector<Task> task(numTask);
+        {
             //prepare task
-			int sizeTask = m.N / numThreads + (bool)(m.N % numThreads);
-			for (int i = 0; i < numThreads; i++)
-				task[i] = std::make_pair(i*sizeTask, min((i + 1)*sizeTask, m.N));
-			int lastPointerM = 0;
-			for (int i = 0; i < numThreads; i++)
-			{
-				elCountM[i] = lastPointerM;
-				int jstart = task[i].first;
-				int jend   = task[i].second;
-				for (jstart; jstart < jend; jstart++)
-				{
-					lastPointerM += m.pointer[jstart + 1] - m.pointer[jstart];
-				}
-			}
-		}
+            int sizeTask = m.N / numTask + (bool)(m.N % numTask);
+            for (int i = 0; i < numTask; i++)
+                task[i] = Task(i*sizeTask, min((i + 1)*sizeTask, m.N), i % numTask);
+            int lastPointerM = 0;
+            for (int i = 0; i < numTask; i++)
+            {
+                elCountM[i] = lastPointerM;
+                int jstart = task[i].pointerStart;
+                const int jend = task[i].pointerEnd;
+                for (jstart; jstart < jend; jstart++)
+                {
+                    lastPointerM += m.pointer[jstart + 1] - m.pointer[jstart];
+                }
+            }
+        }
 
-        #pragma omp parallel for
-		for (int itask = 0; itask < task.size(); itask++)
-        for (int j = task[itask].first; j < task[itask].second; j++)
-		{
-			int indexThread = omp_get_thread_num();
-			int numElInResCol = 0;
-			const int numElementInCol = m.pointer[j + 1] - m.pointer[j];
-			if (numElementInCol == 0)
-			{
-				int size = tmp[indexThread].pointer.size();
-				tmp[indexThread].pointer.push_back(tmp[indexThread].pointer[size - 1]);
-				continue;
-			}
-			int elCountThis = 0;
-			for (int i = 0; i < N; i++)
-			{
-				const int numElementInRow = pointer[i + 1] - pointer[i];
-				if (numElementInRow == 0)
-				{
-					continue;
-				}
-				int tmpNumElCol = numElementInCol;
-				int tmpNumElRow = numElementInRow;
+        tbb::parallel_for(size_t(0), task.size(), size_t(1), [=](size_t i) {iterationMult(task[i].pointerStart, task[i].pointerEnd, task[i].taskIndex, m, cols, &tmp[task[i].taskIndex], &elCountM[task[i].taskIndex]); });
 
-				Element sum = 0;
-				int tmpElCountM = elCountM[indexThread];
-				for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
-				{
-					int colThis = (*cols)[elCountThis];
-					int rowM = m.rows[tmpElCountM];
-					if (colThis == rowM)
-					{
-						sum += values[elCountThis] * m.values[tmpElCountM];
-						tmpNumElCol--;
-						tmpNumElRow--;
-						tmpElCountM++;
-						elCountThis++;
-					}
-					else if (colThis < rowM)
-					{
-						tmpNumElRow--;
-						elCountThis++;
-					}
-					else
-					{
-						tmpNumElCol--;
-						tmpElCountM++;
-					}
-				}
-				for (int z = 0; z < tmpNumElRow; z++)
-					elCountThis++;
-
-				if (sum != 0)
-				{
-					tmp[indexThread].values.push_back(sum);
-					tmp[indexThread].rows.push_back(i);
-					numElInResCol++;
-				}
-			}
-			const int size = tmp[indexThread].pointer.size();
-			tmp[indexThread].pointer.push_back(tmp[indexThread].pointer[size - 1] + numElInResCol);
-			elCountM[indexThread] += numElementInCol;
-		}
-		#pragma omp barrier
-		for (int i = 1; i < numThreads; i++)
-		{
-			tmp[0].unite(tmp[i]);
-		}
-		if (tmp[0].pointer.size() < N + 1)
-			tmp[0].pointer.push_back(tmp[0].values.size());
-		return tmp[0];
+        for (int i = 1; i < tmp.size(); i++)
+        {
+            tmp[0].unite(tmp[i]);
+        }
+        if (tmp[0].pointer.size() < N + 1)
+            tmp[0].pointer.push_back(tmp[0].values.size());
+        return tmp[0];
     }
 	
     bool operator == (const MatrixCCS &m)
