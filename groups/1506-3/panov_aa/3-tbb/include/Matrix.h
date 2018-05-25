@@ -298,82 +298,8 @@ public:
         return res;
     }
 
-    void iterationMult(int start, int end, int taskIndex, const MatrixCCS &m, const vector<int> *cols, const MatrixCCS *tmp1, const int *elCountM)
-    {
-        MatrixCCS *tmp = const_cast<MatrixCCS*>(tmp1);
-        for (int j = start; j < end; j++)
-        {
-            int indexTask = taskIndex;
-            int numElInResCol = 0;
-            const int numElementInCol = m.pointer[j + 1] - m.pointer[j];
-            if (numElementInCol == 0)
-            {
-                int size = tmp->pointer.size();
-                tmp->pointer.push_back(tmp->pointer[size - 1]);
-                continue;
-            }
-            int elCountThis = 0;
-            for (int i = 0; i < N; i++)
-            {
-                const int numElementInRow = pointer[i + 1] - pointer[i];
-                if (numElementInRow == 0)
-                {
-                    continue;
-                }
-                int tmpNumElCol = numElementInCol;
-                int tmpNumElRow = numElementInRow;
-
-                Element sum = 0;
-                int tmpElCountM = *elCountM;
-                for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
-                {
-                    int colThis = (*cols)[elCountThis];
-                    int rowM = m.rows[tmpElCountM];
-                    if (colThis == rowM)
-                    {
-                        sum += values[elCountThis] * m.values[tmpElCountM];
-                        tmpNumElCol--;
-                        tmpNumElRow--;
-                        tmpElCountM++;
-                        elCountThis++;
-                    }
-                    else if (colThis < rowM)
-                    {
-                        tmpNumElRow--;
-                        elCountThis++;
-                    }
-                    else
-                    {
-                        tmpNumElCol--;
-                        tmpElCountM++;
-                    }
-                }
-                for (int z = 0; z < tmpNumElRow; z++)
-                    elCountThis++;
-
-                if (sum != 0)
-                {
-                    tmp->values.push_back(sum);
-                    tmp->rows.push_back(i);
-                    numElInResCol++;
-                }
-            }
-            const int size = tmp->pointer.size();
-            tmp->pointer.push_back(tmp->pointer[size - 1] + numElInResCol);
-            elCountM += numElementInCol;
-        }
-    }
-
     MatrixCCS parallelMult(const MatrixCCS &m, const int numTask)
     {
-        struct Task
-        {
-            int pointerStart;
-            int pointerEnd;
-            int taskIndex;
-            Task() :pointerStart(0), pointerEnd(0), taskIndex(0) {}
-            Task(int a, int b, int c) :pointerStart(a), pointerEnd(b), taskIndex(c) {}
-        };
         vector<MatrixCCS> tmp(numTask, MatrixCCS(N));
         vector<int> elCountM(numTask);
         vector<int> *cols = &rows;
@@ -396,8 +322,12 @@ public:
                 }
             }
         }
-
-        tbb::parallel_for(size_t(0), task.size(), size_t(1), [=](size_t i) {iterationMult(task[i].pointerStart, task[i].pointerEnd, task[i].taskIndex, m, cols, &tmp[task[i].taskIndex], &elCountM[task[i].taskIndex]); });
+		size_t n = task.size();
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, n),[&](const tbb::blocked_range<size_t>& r)
+		{
+			for (size_t i = r.begin(); i != r.end(); ++i)
+			iterationMult(task[i], m, rows, tmp[task[i].taskIndex], elCountM[task[i].taskIndex]); 
+		});
 
         for (int i = 1; i < tmp.size(); i++)
         {
@@ -412,4 +342,78 @@ public:
     {
         return (N == m.N & values == m.values & rows == m.rows & pointer == m.pointer);
     }
+	private:
+	void iterationMult(const Task &task, const MatrixCCS &m, const vector<int>& cols, MatrixCCS &tmp, int elCountM)
+	{
+		for (int j = task.pointerStart; j < task.pointerEnd; j++)
+		{
+			int indexTask = task.taskIndex;
+			int numElInResCol = 0;
+			const int numElementInCol = m.pointer[j + 1] - m.pointer[j];
+			if (numElementInCol == 0)
+			{
+				int size = tmp.pointer.size();
+				tmp.pointer.push_back(tmp.pointer[size - 1]);
+				continue;
+			}
+			int elCountThis = 0;
+			for (int i = 0; i < N; i++)
+			{
+				const int numElementInRow = pointer[i + 1] - pointer[i];
+				if (numElementInRow == 0)
+				{
+					continue;
+				}
+				int tmpNumElCol = numElementInCol;
+				int tmpNumElRow = numElementInRow;
+
+				Element sum = 0;
+				int tmpElCountM = elCountM;
+				for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
+				{
+					int colThis = cols[elCountThis];
+					int rowM = m.rows[tmpElCountM];
+					if (colThis == rowM)
+					{
+						sum += values[elCountThis] * m.values[tmpElCountM];
+						tmpNumElCol--;
+						tmpNumElRow--;
+						tmpElCountM++;
+						elCountThis++;
+					}
+					else if (colThis < rowM)
+					{
+						tmpNumElRow--;
+						elCountThis++;
+					}
+					else
+					{
+						tmpNumElCol--;
+						tmpElCountM++;
+					}
+				}
+				for (int z = 0; z < tmpNumElRow; z++)
+					elCountThis++;
+
+				if (sum != 0)
+				{
+					tmp.values.push_back(sum);
+					tmp.rows.push_back(i);
+					numElInResCol++;
+				}
+			}
+			const int size = tmp.pointer.size();
+			tmp.pointer.push_back(tmp.pointer[size - 1] + numElInResCol);
+			elCountM += numElementInCol;
+		}
+	}
+};
+
+struct Task
+{
+	int pointerStart;
+	int pointerEnd;
+	int taskIndex;
+	Task() :pointerStart(0), pointerEnd(0), taskIndex(0) {}
+	Task(int a, int b, int c) :pointerStart(a), pointerEnd(b), taskIndex(c) {}
 };
