@@ -14,6 +14,15 @@ using std::make_pair;
 using std::min;
 typedef double Element;
 
+struct Task
+{
+	int pointerStart;
+	int pointerEnd;
+	int taskIndex;
+	Task() :pointerStart(0), pointerEnd(0), taskIndex(0) {}
+	Task(int a, int b, int c) :pointerStart(a), pointerEnd(b), taskIndex(c) {}
+};
+
 class Matrix
 {
 protected:
@@ -109,6 +118,7 @@ public:
         return os;
     }
 };
+
 class MatrixCCS
 {
 protected:
@@ -117,6 +127,7 @@ protected:
     vector<int> pointer;
     int N;
 public:
+	//friend class FunctorTBB;	
     MatrixCCS() {}
     MatrixCCS(int n) :N(n) 
     {
@@ -297,53 +308,152 @@ public:
 		transpositionMatrix();
         return res;
     }
-
-    MatrixCCS parallelMult(const MatrixCCS &m, const int numTask)
-    {
-        vector<MatrixCCS> tmp(numTask, MatrixCCS(N));
-        vector<int> elCountM(numTask);
-        vector<int> *cols = &rows;
-
-        vector<Task> task(numTask);
-        {
-            //prepare task
-            int sizeTask = m.N / numTask + (bool)(m.N % numTask);
-            for (int i = 0; i < numTask; i++)
-                task[i] = Task(i*sizeTask, min((i + 1)*sizeTask, m.N), i % numTask);
-            int lastPointerM = 0;
-            for (int i = 0; i < numTask; i++)
-            {
-                elCountM[i] = lastPointerM;
-                int jstart = task[i].pointerStart;
-                const int jend = task[i].pointerEnd;
-                for (jstart; jstart < jend; jstart++)
-                {
-                    lastPointerM += m.pointer[jstart + 1] - m.pointer[jstart];
-                }
-            }
-        }
-		size_t n = task.size();
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, n),[&](const tbb::blocked_range<size_t>& r)
+	MatrixCCS parallelMult(MatrixCCS &m, const int numTask)
+	{
+		class FunctorTBB
 		{
-			for (size_t i = r.begin(); i != r.end(); ++i)
-			iterationMult(task[i], m, rows, tmp[task[i].taskIndex], elCountM[task[i].taskIndex]); 
-		});
+		private:
+			MatrixCCS *matrix1;
+			MatrixCCS *matrix2;
+			vector<Task> *tasks;
+			vector<MatrixCCS> *tmp;
+			vector<int> *elCountM;
+		public:
+			FunctorTBB()
+			{
+				matrix1 = nullptr;
+				matrix2 = nullptr;
+				tasks = nullptr;
+				tmp = nullptr;
+				elCountM = nullptr;
+			}
+			FunctorTBB(MatrixCCS *matrix1_, MatrixCCS *matrix2_, vector<Task> *tasks_, vector<MatrixCCS> *tmp_, vector<int> *elCountM_)
+			{
+				matrix1 = matrix1_;
+				matrix2 = matrix2_;
+				tasks = tasks_;
+				tmp = tmp_;
+				elCountM = elCountM_;
+			}
+			FunctorTBB(const FunctorTBB &f)
+			{
+				matrix1 = f.matrix1;
+				matrix2 = f.matrix2;
+				tasks = f.tasks;
+				tmp = f.tmp;
+				elCountM = f.elCountM;
+			}			
+			void operator()(const tbb::blocked_range<size_t>& range) const
+			{
+				int N = matrix1->N;
+				vector<int> *cols = &(matrix1->rows);
+				for (size_t it = range.begin(); it < range.end(); it++)
+					for (int j = (*tasks)[it].pointerStart; j < (*tasks)[it].pointerEnd; j++)
+					{
+						int indexTask = (*tasks)[it].taskIndex;
+						int numElInResCol = 0;
+						const int numElementInCol = matrix2->pointer[j + 1] - matrix2->pointer[j];
+						if (numElementInCol == 0)
+						{
+							int size = (*tmp)[it].pointer.size();
+							(*tmp)[it].pointer.push_back((*tmp)[it].pointer[size - 1]);
+							continue;
+						}
+						int elCountThis = 0;
+						for (int i = 0; i < N; i++)
+						{
+							const int numElementInRow = matrix1->pointer[i + 1] - matrix1->pointer[i];
+							if (numElementInRow == 0)
+							{
+								continue;
+							}
+							int tmpNumElCol = numElementInCol;
+							int tmpNumElRow = numElementInRow;
 
-        for (int i = 1; i < tmp.size(); i++)
-        {
-            tmp[0].unite(tmp[i]);
-        }
-        if (tmp[0].pointer.size() < N + 1)
-            tmp[0].pointer.push_back(tmp[0].values.size());
-        return tmp[0];
-    }
-	
+							Element sum = 0;
+							int tmpElCountM = (*elCountM)[it];
+							for (int z = 0; z < min(tmpNumElCol, tmpNumElRow);)
+							{
+								int colThis = (*cols)[elCountThis];
+								int rowM = matrix2->rows[tmpElCountM];
+								if (colThis == rowM)
+								{
+									sum += matrix1->values[elCountThis] * matrix2->values[tmpElCountM];
+									tmpNumElCol--;
+									tmpNumElRow--;
+									tmpElCountM++;
+									elCountThis++;
+								}
+								else if (colThis < rowM)
+								{
+									tmpNumElRow--;
+									elCountThis++;
+								}
+								else
+								{
+									tmpNumElCol--;
+									tmpElCountM++;
+								}
+							}
+							for (int z = 0; z < tmpNumElRow; z++)
+								elCountThis++;
+
+							if (sum != 0)
+							{
+								(*tmp)[it].values.push_back(sum);
+								(*tmp)[it].rows.push_back(i);
+								numElInResCol++;
+							}
+						}
+						const int size = (*tmp)[it].pointer.size();
+						(*tmp)[it].pointer.push_back((*tmp)[it].pointer[size - 1] + numElInResCol);
+						(*elCountM)[it] += numElementInCol;
+					}
+			}
+			~FunctorTBB()
+			{
+
+			}
+		};
+		vector<MatrixCCS> tmp(numTask, MatrixCCS(N));
+		vector<int> elCountM(numTask);
+		vector<int> *cols = &rows;
+		vector<Task> task(numTask);
+		{
+			//prepare task
+			int sizeTask = m.N / numTask + (bool)(m.N % numTask);
+			for (int i = 0; i < numTask; i++)
+				task[i] = Task(i*sizeTask, min((i + 1)*sizeTask, m.N), i % numTask);
+			int lastPointerM = 0;
+			for (int i = 0; i < numTask; i++)
+			{
+				elCountM[i] = lastPointerM;
+				int jstart = task[i].pointerStart;
+				const int jend = task[i].pointerEnd;
+				for (jstart; jstart < jend; jstart++)
+				{
+					lastPointerM += m.pointer[jstart + 1] - m.pointer[jstart];
+				}
+			}
+		}
+		MatrixCCS *p = 0;
+		FunctorTBB f(this, &m, &task, &tmp, &elCountM);
+		tbb::parallel_for(tbb::blocked_range<size_t>(0, task.size()), f);
+
+		for (int i = 1; i < tmp.size(); i++)
+		{
+			tmp[0].unite(tmp[i]);
+		}
+		if (tmp[0].pointer.size() < N + 1)
+			tmp[0].pointer.push_back(tmp[0].values.size());
+		return tmp[0];
+	}
     bool operator == (const MatrixCCS &m)
     {
         return (N == m.N & values == m.values & rows == m.rows & pointer == m.pointer);
     }
 	private:
-	void iterationMult(const Task &task, const MatrixCCS &m, const vector<int>& cols, MatrixCCS &tmp, int elCountM)
+	/*void iterationMult(const Task &task, const MatrixCCS &m, const vector<int>& cols, MatrixCCS &tmp, int elCountM)
 	{
 		for (int j = task.pointerStart; j < task.pointerEnd; j++)
 		{
@@ -406,14 +516,6 @@ public:
 			tmp.pointer.push_back(tmp.pointer[size - 1] + numElInResCol);
 			elCountM += numElementInCol;
 		}
-	}
+	}*/
 };
 
-struct Task
-{
-	int pointerStart;
-	int pointerEnd;
-	int taskIndex;
-	Task() :pointerStart(0), pointerEnd(0), taskIndex(0) {}
-	Task(int a, int b, int c) :pointerStart(a), pointerEnd(b), taskIndex(c) {}
-};
