@@ -415,7 +415,9 @@ public:
 
 			}
 		};
-        const int numTask = numThreads;
+        int numTask = numThreads*8;
+        if (numTask > N)
+            numTask = N;
 		vector<MatrixCCS> tmp(numTask, MatrixCCS(N));
 		vector<int> elCountM(numTask);
 		vector<int> *cols = &rows;
@@ -438,9 +440,9 @@ public:
 			}
 		}
 		MatrixCCS *p = 0;
-        tbb::task_scheduler_init init(numThreads);
+        
 		FunctorTBB f(this, &m, &task, &tmp, &elCountM);
-		tbb::parallel_for(tbb::blocked_range<size_t>(0, task.size()), f);
+		tbb::parallel_for(tbb::blocked_range<size_t>((size_t)0, task.size(), (size_t)4), f);
 
 		for (int i = 1; i < tmp.size(); i++)
 		{

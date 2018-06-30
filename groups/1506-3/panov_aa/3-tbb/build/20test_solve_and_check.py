@@ -8,6 +8,12 @@ print('print num threads')
 numThread = int(input())
 testinput = 'tests\\20tests'
 if os.path.exists(testinput):
+    
+    try:
+        os.makedirs('tests\\20tests_result')
+    except Exception:
+        print('folder exist')
+    
     for i in range(0, numTest):
         number = str(i)
         if numThread != 1:

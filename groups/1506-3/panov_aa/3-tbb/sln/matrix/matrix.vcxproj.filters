@@ -23,7 +23,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\Source.cpp">
+    <ClCompile Include="..\..\src\mymatrix.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

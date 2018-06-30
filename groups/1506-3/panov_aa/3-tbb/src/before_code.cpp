@@ -40,7 +40,8 @@ int main(int argc, char * argv[])//читает из бинарного файла, запускает программ
     MatrixCCS Acol(A), Bcol(B), ResCol;
 
     Acol.transpositionMatrix();
-    double time = omp_get_wtime();	
+    double time = omp_get_wtime();
+    tbb::task_scheduler_init init(numThreads);
     ResCol = ParallelMatrixMult(Acol, Bcol, numThreads);
 	time = omp_get_wtime() - time;
     Acol.transpositionMatrix();
