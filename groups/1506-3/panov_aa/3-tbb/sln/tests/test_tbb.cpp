@@ -1,6 +1,6 @@
 #include "../gtest/gtest/gtest.h"
 #include "tbb/tbb.h"
-#include "matrix.h"
+#include "mymatrix.h"
 
 void Foo(int &a)
 {

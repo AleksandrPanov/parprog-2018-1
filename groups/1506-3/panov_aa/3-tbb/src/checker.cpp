@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cmath>
 #include <string>
-#include "../include/matrix.h"
+#include "../include/mymatrix.h"
 using namespace std;
 // Используется для взаимодействия с тестирующей системой
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,12 +27,9 @@ private:
     FILE * bur;
 public:
     enum ext_cls { NO = 1, VERDICT, MESSAGE, TIME, MEMORY };
-    Result(string path, string name, string extension,  bool read = false)
+    Result(string path)
     {
-        if (read) 
-            bur = fopen((path + name + extension + ".txt").c_str(), "r");
-        else 
-            bur = fopen((path + name + extension + ".txt").c_str(), "w");
+        bur = fopen(path.c_str(), "w");
     }
     ~Result() 
     { 
@@ -73,51 +70,39 @@ public:
 
 int main(int argc, char * argv[])
 {
-    string path = "";
-    string path_result = "";
-    string number = "";
-    string name = "matr";
-    string extensionIn = ".in";
-    string extensionOutAnswer = ".ans";
-    string extensionOutUserAnswer = ".user.ans";
-    string extensionResult = ".result";
+	string result;
+	string userAnswer;
+	string trueAnswer;
+	
     if (argc > 1)
     {
-        path = argv[1];
-        path_result = path + "_result\\";
-        path += "\\";
+		result = argv[1];
         if (argc > 2)
         {
-            name = "";
-            number = argv[2];
+			userAnswer = argv[2];
+			if (argc > 3)
+				trueAnswer = argv[3];
         }
     }
-    if (number == "")
-        extensionResult = "result";
-    /*name = "\\";
-    path = "E:\\projects\\labs\\parprog-2018-1\\groups\\1506-3\\panov_aa\\build\\tests\\20tests";
-    path_result = "E:\\projects\\labs\\parprog-2018-1\\groups\\1506-3\\panov_aa\\build\\tests\\20tests_result\\";
-    number = "10";*/
 
-    Result checker_result(path_result, number, extensionResult);
 
-    // Открываем файл входных данных, ответ участника, файл выходных данных c ответом жюри
-    FILE * bui = fopen((path + name + number + extensionIn).c_str(), "rb");
-    FILE * buo = fopen((path_result + name + number + extensionOutUserAnswer).c_str(), "rb");
-    FILE * bua = fopen((path + name + number + extensionOutAnswer).c_str(), "rb");
+    Result checker_result(result);
+
+    // Открываем ответ участника, файл выходных данных c ответом жюри
+    FILE * buo = fopen(userAnswer.c_str(), "rb");
+    FILE * bua = fopen(trueAnswer.c_str(), "rb");
     int n;
-    // Считываем размерность матриц
-    fread(&n, sizeof(n), 1, bui);
-    // Выделяем память для матрицы ответа жюри и ответа участника
-    Matrix ans(n, n), res(n, n);
+	// Считываем  матрицу жюри
+	fread(&n, sizeof(n), 1, bua);
+	// Выделяем память для матрицы ответа жюри и ответа участника
+	Matrix ans(n, n), res(n, n);
+	fread(ans.getP(), sizeof(*ans.getP()), n * n, bua);
 
     double ans_time, res_time;
     // Считываем время работы программы участника и матрицу участника
     fread(&res_time, sizeof(res_time), 1, buo);
     fread(res.getP(), sizeof(*res.getP()), n * n, buo);
-    // Считываем  матрицу жюри
-    fread(&n, sizeof(n), 1, bua);
-    fread(ans.getP(), sizeof(*ans.getP()), n * n, bua);
+
     // Вычисляем ошибку, как квадрат нормы разности решений
     double diff = 0.0;
     for (int i = 0; i < n * n; i++)

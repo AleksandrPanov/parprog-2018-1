@@ -1,24 +1,19 @@
 import sys
 import subprocess	
+import os
 
-numThread = 4	
-start = 0
 numTest = 20
-
-if len(sys.argv) > 1:	
-	numThread = int(sys.argv[1])
-	if len(sys.argv) > 2:
-		numTest = int(sys.argv[2])		
-		if len(sys.argv) > 3:
-			start = int(sys.argv[3])
-
-testinput = 'tests\\' + str(20) + 'tests'
-for i in range(start, numTest):
-		if numThread != 1:
-			subprocess.call(['matrix_multiplication.exe', testinput, str(i), str(numThread)], stdout=subprocess.PIPE, shell = True)
-		else:
-			subprocess.call(['matrix_multiplication.exe', testinput, str(i)], stdout=subprocess.PIPE, shell = True)
-    
-        
-for i in range(start, numTest):
-         subprocess.call(['checker.exe', testinput, str(i)], stdout=subprocess.PIPE, shell = True)
+numThread = 1
+print('print num threads')
+numThread = int(input())
+testinput = 'tests\\20tests'
+if os.path.exists(testinput):
+    for i in range(0, numTest):
+        number = str(i)
+        if numThread != 1:
+            subprocess.call(['matrix_multiplication.exe', testinput+'\\'+number+'.in', testinput+'_result\\'+number+'.user.ans', str(numThread)], stdout=subprocess.PIPE, shell = True)
+        else:
+            subprocess.call(['matrix_multiplication.exe', testinput+'\\'+number+'.in', testinput+'_result\\'+number+'.user.ans'], stdout=subprocess.PIPE, shell = True)
+        print('solved test '+str(i))
+        for i in range(0, numTest):
+            subprocess.call(['checker.exe', testinput+'_result\\'+number+'.res.txt', testinput+'_result\\'+number+'.user.ans', testinput+'\\'+number+'.ans'], stdout=subprocess.PIPE, shell = True)

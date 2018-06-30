@@ -1,6 +1,7 @@
 import subprocess
-start = 0
+import os
 numTest = 20
-testinput = 'tests\\' + str(numTest) + 'tests'
-for i in range(start, numTest):
-    subprocess.call(['binaryToTxt.exe', testinput, str(i)], stdout=subprocess.PIPE, shell = True)
+testinput = 'tests\\20tests\\'
+for i in range(0, numTest):
+    subprocess.call(['binaryToTxt.exe', testinput+str(i)+'.in', testinput+str(i)+'.txt', testinput+str(i)+'.ans', testinput+str(i)+'.ans.txt'], stdout=subprocess.PIPE, shell = True)
+    print('matrix A, B, res bin to txt '+str(i))

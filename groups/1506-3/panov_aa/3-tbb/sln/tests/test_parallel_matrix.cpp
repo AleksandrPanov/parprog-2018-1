@@ -1,5 +1,5 @@
 #include "../gtest/gtest/gtest.h"
-#include "matrix.h"
+#include "mymatrix.h"
 
 Matrix getMatrix6()
 {
